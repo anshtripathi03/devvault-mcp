@@ -66,8 +66,13 @@ jobs:
           script: |
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/devvault-mcp:latest
             docker rm -f devvault-mcp || true
+            # Hard memory cap. This box also runs Postgres, and under memory
+            # pressure the kernel's OOM killer picks the largest process --
+            # which would be the database, not this. The cap makes the
+            # container the casualty instead. It idles around 60-80MB.
             docker run -d --name devvault-mcp \
               --restart unless-stopped \
+              --memory=256m --memory-swap=256m \
               -p 8081:8080 \
               -e DEVVAULT_URL=${{ secrets.DEVVAULT_API_URL }} \
               ${{ secrets.DOCKER_HUB_USERNAME }}/devvault-mcp:latest
