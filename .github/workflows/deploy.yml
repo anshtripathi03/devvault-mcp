@@ -1,0 +1,102 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify:
+    name: Typecheck and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      # Exercises every tool against a stub API: registration, the ledger's
+      # dedup and budget behaviour, and the flat->tree conversion.
+      - run: node smoke.mjs
+
+  build:
+    name: Build Docker image and push to Docker Hub
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/devvault-mcp:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MCP_EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/devvault-mcp:latest
+            docker rm -f devvault-mcp || true
+            docker run -d --name devvault-mcp \
+              --restart unless-stopped \
+              -p 8081:8080 \
+              -e DEVVAULT_URL=${{ secrets.DEVVAULT_API_URL }} \
+              ${{ secrets.DOCKER_HUB_USERNAME }}/devvault-mcp:latest
+
+      - name: Verify health
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MCP_EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sleep 5
+            curl -fsS http://127.0.0.1:8081/health || (docker logs --tail 50 devvault-mcp && exit 1)
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: verify
+    # The stdio transport ships via npm, not the container. Tag a release to
+    # publish; ordinary pushes to main only redeploy the HTTP transport.
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
