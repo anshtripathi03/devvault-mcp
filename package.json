@@ -1,5 +1,5 @@
 {
-  "name": "@devvault/mcp",
+  "name": "@devvault-mcp/server",
   "version": "0.1.0",
   "description": "Connect DevVault to a coding agent: research in, context out.",
   "license": "MIT",
