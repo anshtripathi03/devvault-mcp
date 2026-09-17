@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    # Without this the workflow never starts on a tag, so the publish job below
+    # could never run however its `if` was written.
+    tags:
+      - "v*"
   pull_request:
 
 jobs:
