@@ -31,6 +31,13 @@ function check(label, condition) {
   check("nest: grandchild attached", tree.children[0].children[0].title === "Grandchild");
   check("nest: external_key carried", tree.external_key === "root");
 
+  const roled = nest([
+    { title: "Conventions", blocks: [], parent: null, role: "core" },
+    { title: "Background", blocks: [], parent: 0, role: "reference" },
+  ]);
+  check("nest: role carried on the root", roled.role === "core");
+  check("nest: role carried on a child", roled.children[0].role === "reference");
+
   let threw = false;
   try {
     nest([{ title: "A", blocks: [], parent: 5 }]);
@@ -152,6 +159,12 @@ check(
 check(
   "tools: write_rules insists on a task-agnostic extraction",
   tools.find((t) => t.name === "devvault_write_rules").description.includes("not only the ones relevant"),
+);
+check(
+  "tools: save_research exposes a role per container",
+  JSON.stringify(
+    tools.find((t) => t.name === "devvault_save_research").inputSchema,
+  ).includes("reference"),
 );
 
 const body = (r) => r.content.map((c) => c.text).join("\n");

@@ -61,7 +61,17 @@ const flatContainerSchema = z.object({
     .describe(
       "Optional. The actionable rules from this container, one per line, imperative.",
     ),
+  role: z
+    .enum(["core", "reference"])
+    .default("reference")
+    .describe(
+      "'core' = rules that must hold for EVERY task in this area, whatever is being built (folder structure, naming, mandatory patterns). These are injected into every request, so keep them few and short. " +
+        "'reference' = research, background and topic-specific detail, loaded only when a task actually touches it. " +
+        "Ask: if nobody read this, would the code be WRONG, or just less informed? Wrong means core; less informed means reference. When unsure choose reference — the user can promote it, and over-marking core taxes every future request.",
+    ),
 });
+
+type ContainerRole = "core" | "reference";
 
 interface FlatContainer {
   title: string;
@@ -69,6 +79,7 @@ interface FlatContainer {
   parent: number | null;
   external_key?: string;
   agent_rules?: string;
+  role?: ContainerRole;
 }
 
 interface NestedContainer {
@@ -77,6 +88,7 @@ interface NestedContainer {
   children: NestedContainer[];
   external_key?: string;
   agent_rules?: string;
+  role?: ContainerRole;
 }
 
 /** Re-nest a flat parent-indexed list into the tree the API expects. */
@@ -89,6 +101,7 @@ export function nest(flat: FlatContainer[]): NestedContainer {
     children: [],
     external_key: item.external_key,
     agent_rules: item.agent_rules,
+    role: item.role,
   }));
 
   let root: NestedContainer | null = null;
@@ -376,7 +389,8 @@ export function buildServer(client: DevVaultClient, ledger = new Ledger()): McpS
         "You decide the structure: group by topic, one topic per container, and nest sub-topics as children. Write real titles. " +
         "Constraints are enforced server-side and anything over them is repaired automatically (long paragraphs split, extra blocks spill into continuation containers, deep nesting is flattened and linked) — the response tells you exactly what was adjusted, so report that to the user. " +
         "Always set external_key on every container: re-running the same research then updates in place instead of duplicating. " +
-        "Supplying agent_rules alongside the research is worth doing — it saves a future session from re-reading the prose.",
+        "Supplying agent_rules alongside the research is worth doing — it saves a future session from re-reading the prose. " +
+        "Set `role` per container: most research is 'reference'; use 'core' only for rules that must hold on every task in that area. The user can change either afterwards.",
       inputSchema: {
         containers: z
           .array(flatContainerSchema)
