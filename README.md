@@ -53,7 +53,7 @@ src/
   "mcpServers": {
     "devvault": {
       "command": "npx",
-      "args": ["-y", "@devvault/mcp"],
+      "args": ["-y", "@devvault-mcp/server"],
       "env": {
         "DEVVAULT_URL": "https://anshbackend.upyourbusiness.tech",
         "DEVVAULT_TOKEN": "dvp_..."   // Settings -> Connected Agents
